@@ -92,13 +92,47 @@ if (Test-Path $log) {
 
 Write-Step 'Next: pick a model in the Handy window'
 
-if ($hasDiscreteGpu) {
+# What matters is FREE VRAM right now, not the card's total. A desktop full of
+# browsers and Electron apps can leave a 6 GB card with barely 1 GB usable, and
+# an oversized model then spills to system RAM - fast on short test phrases,
+# catastrophic on real sentences.
+$freeVramMB = $null
+$nvidiaSmi = Join-Path $env:SystemRoot 'System32\nvidia-smi.exe'
+if (Test-Path $nvidiaSmi) {
+    try {
+        $freeVramMB = [int]((& $nvidiaSmi --query-gpu=memory.free --format=csv,noheader,nounits |
+                             Select-Object -First 1).Trim())
+        Write-Ok "Free VRAM right now: $freeVramMB MiB"
+    } catch {
+        Write-Warn 'Could not read free VRAM from nvidia-smi.'
+    }
+}
+
+if ($null -ne $freeVramMB -and $freeVramMB -ge 3000) {
     Write-Host '    Recommended: Cohere Transcribe (1.6 GB, highest accuracy).'
-    Write-Host '    Its "slower" label assumes CPU - your GPU handles it fine.'
-} else {
+    Write-Host '    You have enough free VRAM for it with headroom.'
+}
+elseif ($null -ne $freeVramMB) {
+    Write-Host '    Recommended: Parakeet Unified EN 0.6B (697 MB).'
+    Write-Warn "Only $freeVramMB MiB of VRAM is free - Cohere Transcribe (1.6 GB)"
+    Write-Warn '    would spill to system RAM. It would feel fast on short test'
+    Write-Warn '    phrases and then crawl on real sentences.'
+    Write-Host '    Closing browsers frees VRAM if you want the bigger model.'
+}
+elseif ($hasDiscreteGpu) {
+    Write-Host '    Discrete GPU found, but free VRAM is unknown.'
+    Write-Host '    Start with Parakeet Unified EN 0.6B (697 MB) - it fits anywhere.'
+    Write-Host '    Move up to Cohere Transcribe only if 3 GB+ of VRAM is free.'
+}
+else {
     Write-Host '    Recommended: Parakeet Unified EN 0.6B (697 MB).'
     Write-Host '    No discrete GPU detected, so avoid Cohere and Whisper Medium/Large.'
 }
+
+Write-Host ''
+Write-Host '    Check your speed in the log after a few real sentences:' -ForegroundColor Cyan
+Write-Host '      Transcription completed in X for Y of audio (Z real-time)'
+Write-Host '    Below 1.0x means the model is too big for your free VRAM.'
 
 Write-Host ''
 Write-Host '    Then set a hotkey. The Ctrl+Space default collides with' -ForegroundColor Yellow

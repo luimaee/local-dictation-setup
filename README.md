@@ -104,14 +104,69 @@ depends entirely on whether you have a usable GPU.
 | Cohere Transcribe | 1.6 GB | Highest accuracy. Labeled "slower" — that assumes CPU. |
 | Whisper Medium / Large | varies | Broadest language coverage, heaviest. |
 
-Rules of thumb from doing this on both an Intel Mac and an RTX 2060 box:
+### Size the model against FREE VRAM, not against your GPU
+
+This is the mistake worth learning from someone else's time. "I have a decent
+GPU, so I'll take the big model" is wrong reasoning. What matters is how much
+VRAM is **free while you actually work**, and a modern desktop eats a lot of it.
+
+Measure first:
+
+```powershell
+nvidia-smi --query-gpu=name,memory.total,memory.used,memory.free --format=csv
+```
+
+A real reading from an RTX 2060 box mid-workday — browsers, Electron apps, a
+couple of WebView2 processes, vendor tray utilities:
+
+```
+NVIDIA GeForce RTX 2060, 6144 MiB total, 4728 MiB used, 1218 MiB free
+```
+
+6 GB card, **1.2 GB actually available**. Cohere Transcribe is a 1.6 GB model.
+It loaded, and it "worked" — but see the symptom below.
+
+**Pick a model that fits in the free figure, with room to spare.** Weights are
+the floor, not the ceiling: activation buffers grow with how long you speak.
+
+| Free VRAM | Take |
+| --- | --- |
+| < 1.5 GB (or no usable GPU) | Parakeet Unified EN 0.6B, or Canary 180M |
+| 1.5–3 GB | Parakeet Unified EN 0.6B comfortably |
+| 3 GB+ | Cohere Transcribe |
+
+### The symptom of a model that doesn't fit
+
+It does not fail loudly. It gets **super-linearly slower as clips get longer**,
+because short utterances fit in the VRAM that's left and long ones spill across
+PCIe into system RAM. Measured on the 1.2 GB-free machine above with Cohere:
+
+| Audio | Time | Speed |
+| --- | --- | --- |
+| 2.13s | 0.31s | 6.8x real-time |
+| 2.25s | 0.37s | 6.1x real-time |
+| 7.05s | 16.56s | **0.43x real-time** |
+
+Three times the audio, **fifty times** the work. If short test phrases feel
+instant but real sentences hang, you are over your VRAM budget — drop a model
+size. Don't be fooled by a quick "testing, one two three."
+
+Handy logs the ratio, so you can check rather than guess:
+
+```
+Transcription completed in 16.56s for 7.05s of audio (0.43x real-time)
+```
+
+Anything below 1.0x means transcribing takes longer than talking did.
+
+### Other rules of thumb
 
 - **No discrete GPU (incl. every Intel Mac):** Parakeet Unified EN. If you pick
   Whisper, pick Small, not Medium — Medium on an Intel CPU crawls.
-- **Any reasonably modern discrete GPU:** Cohere Transcribe. The "slower" label
-  is a CPU caveat. On a 2060 it loaded in 2.2 seconds.
 - **You dictate in more than one language:** Nemotron or Whisper. Parakeet
   Unified EN is English-only and will not degrade gracefully.
+- **First run after a model load is always slow** (8–11s is normal) — that's the
+  load, not the transcription. Judge speed from the second run onward.
 
 ### Confirming you're actually on the GPU
 
