@@ -1,0 +1,9 @@
+# Shell scripts must keep LF endings or they fail on macOS/Linux with
+# "bad interpreter: /usr/bin/env bash^M".
+*.sh    text eol=lf
+
+# PowerShell is fine either way; keep it native on Windows.
+*.ps1   text eol=crlf
+
+*.md    text
+LICENSE text
